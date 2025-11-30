@@ -1,0 +1,165 @@
+dataset:
+  data_path: '$ALFWORLD_DATA/json_2.1.1/train'
+  eval_id_data_path: '$ALFWORLD_DATA/json_2.1.1/valid_seen'    # null/None to disable
+  eval_ood_data_path: '$ALFWORLD_DATA/json_2.1.1/valid_unseen' # null/None to disable
+  num_train_games: -1                                          # max training games (<=0 indicates full dataset)
+  num_eval_games: -1                                           # max evaluation games (<=0 indicates full dataset)
+
+logic:
+  domain: '$ALFWORLD_DATA/logic/alfred.pddl'                   # PDDL domain file that defines the world dynamics
+  grammar: '$ALFWORLD_DATA/logic/alfred.twl2'                  # Grammar file that defines the text feedbacks
+
+env:
+  type: 'AlfredTWEnv'                                          # 'AlfredTWEnv' or 'AlfredThorEnv' or 'AlfredHybrid'
+  regen_game_files: False                                      # check if game is solvable by expert and save to game.tw-pddl file
+  domain_randomization: False                                  # shuffle Textworld print order and object id nums
+  task_types: [1, 2, 3, 4, 5, 6]                               # task-type ids: 1 - Pick & Place, 2 - Examine in Light, 3 - Clean & Place, 4 - Heat & Place, 5 - Cool & Place, 6 - Pick Two & Place
+  expert_timeout_steps: 150                                    # max steps before timeout for expert to solve the task
+  expert_type: "handcoded"                                     # 'handcoded' or 'downward'. Note: the downward planner is very slow for real-time use
+  goal_desc_human_anns_prob: 0.0                               # prob of using human-annotated goal language instead of templated goals (1.0 indicates all human annotations from ALFRED)
+
+  hybrid:
+    start_eps: 100000                                          # starting episode of hybrid training, tw-only training upto this point
+    thor_prob: 0.5                                             # prob of AlfredThorEnv during hybrid training
+    eval_mode: "tw"                                            # 'tw' or 'thor' - env used for evaluation during hybrid training
+
+  thor:
+    screen_width: 300                                          # width of THOR window
+    screen_height: 300                                         # height of THOR window
+    smooth_nav: False                                          # smooth rotations, looks, and translations during navigation (very slow)
+    save_frames_to_disk: False                                 # save frame PNGs to disk (useful for making videos)
+    save_frames_path: './videos/'                              # path to save frame PNGs
+
+controller:
+  type: 'oracle'                                               # 'oracle' or 'oracle_astar' or 'mrcnn' or 'mrcnn_astar' (aka BUTLER)
+  debug: False
+  load_receps: True                                            # load receptacle locations from precomputed dict (if available)
+
+mask_rcnn:
+  pretrained_model_path: '$ALFWORLD_DATA/detectors/mrcnn.pth'
+
+general:
+  random_seed: 42
+  use_cuda: True                                               # disable this when running on machine without cuda
+  visdom: False                                                # plot training/eval curves, run with visdom server
+  task: 'alfred'
+  training_method: 'ppo'                                       # 'dqn' or 'dagger' or 'ppo'
+  save_path: './ppo_output'                                    # path to save pytorch models
+  observation_pool_capacity: 3                                 # k-size queue, 0 indicates no observation
+  hide_init_receptacles: False                                 # remove initial observation containing navigable receptacles
+
+  training:
+    batch_size: 10                                             # number of parallel environments
+    max_episode: 50000                                         # total training episodes
+    smoothing_eps: 0.1
+    optimizer:
+      learning_rate: 0.0003                                    # PPO typically uses smaller learning rate
+      clip_grad_norm: 0.5
+
+  evaluate:
+    run_eval: True                                             # enable evaluation during training
+    run_in: True                                               # evaluate on in-distribution data
+    batch_size: 10                                             # evaluation batch size
+    env:
+      type: "AlfredTWEnv"
+
+  checkpoint:
+    report_frequency: 100                                      # report every N episode
+    experiment_tag: 'ppo_alfworld'                             # name of experiment
+    load_pretrained: False                                     # during test, enable this so that the agent load your pretrained model
+    load_from_tag: 'ppo_alfworld_final'                        # name of pre-trained model to load in save_path
+
+  model:
+    encoder_layers: 1
+    decoder_layers: 1
+    encoder_conv_num: 5
+    block_hidden_dim: 64
+    n_heads: 1
+    dropout: 0.1
+    block_dropout: 0.1
+    recurrent: True
+
+ppo:
+  # PPO-specific hyperparameters
+  clip_epsilon: 0.2                                            # PPO clipping parameter
+  ppo_epochs: 4                                                # number of epochs to train on collected data
+  minibatch_size: 4                                            # minibatch size for PPO updates
+  value_loss_coef: 0.5                                         # coefficient for value loss
+  entropy_coef: 0.01                                           # coefficient for entropy bonus
+  max_grad_norm: 0.5                                           # max gradient norm for clipping
+  gae_lambda: 0.95                                             # lambda for Generalized Advantage Estimation
+  discount_gamma: 0.99                                         # discount factor
+  normalize_advantages: True                                   # normalize advantages
+  max_nb_steps_per_episode: 50                                 # max steps per episode
+
+  action_space: "admissible"                                   # 'admissible' (candidates from text engine)
+  max_target_length: 20                                        # max token length for seq2seq generation
+  beam_width: 10                                               # beam width for beam search
+  generate_top_k: 3                                            # top-k for generation
+
+# DQN and DAGGER configs (kept for compatibility)
+rl:
+  action_space: "admissible"
+  max_target_length: 20
+  beam_width: 10
+  generate_top_k: 3
+
+  training:
+    max_nb_steps_per_episode: 50
+    learn_start_from_this_episode: 0
+    target_net_update_frequency: 500
+
+  replay:
+    accumulate_reward_from_final: True
+    count_reward_lambda: 0.0
+    novel_object_reward_lambda: 0.0
+    discount_gamma_game_reward: 0.9
+    discount_gamma_count_reward: 0.5
+    discount_gamma_novel_object_reward: 0.5
+    replay_memory_capacity: 500000
+    replay_memory_priority_fraction: 0.5
+    update_per_k_game_steps: 5
+    replay_batch_size: 64
+    multi_step: 3
+    replay_sample_history_length: 4
+    replay_sample_update_from: 2
+
+  epsilon_greedy:
+    noisy_net: False
+    epsilon_anneal_episodes: 1000
+    epsilon_anneal_from: 0.3
+    epsilon_anneal_to: 0.1
+
+dagger:
+  action_space: "generation"
+  max_target_length: 20
+  beam_width: 10
+  generate_top_k: 5
+  unstick_by_beam_search: False
+
+  training:
+    max_nb_steps_per_episode: 50
+
+  fraction_assist:
+    fraction_assist_anneal_episodes: 50000
+    fraction_assist_anneal_from: 1.0
+    fraction_assist_anneal_to: 0.01
+
+  fraction_random:
+    fraction_random_anneal_episodes: 0
+    fraction_random_anneal_from: 0.0
+    fraction_random_anneal_to: 0.0
+
+  replay:
+    replay_memory_capacity: 500000
+    update_per_k_game_steps: 5
+    replay_batch_size: 64
+    replay_sample_history_length: 4
+    replay_sample_update_from: 2
+
+vision_dagger:
+  model_type: "resnet"
+  resnet_fc_dim: 64
+  maskrcnn_top_k_boxes: 10
+  use_exploration_frame_feats: False
+  sequence_aggregation_method: "average"

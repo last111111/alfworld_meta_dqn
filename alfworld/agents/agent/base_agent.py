@@ -222,8 +222,15 @@ class BaseAgent:
             self.action_space = self.config['rl']['action_space']
             self.max_nb_steps_per_episode = self.config['rl']['training']['max_nb_steps_per_episode']
             self.unstick_by_beam_search = None
+        elif self.training_method == "ppo":
+            self.max_target_length = self.config['ppo']['max_target_length']
+            self.generate_top_k = self.config['ppo']['generate_top_k']
+            self.beam_width = self.config['ppo']['beam_width']
+            self.action_space = self.config['ppo']['action_space']
+            self.max_nb_steps_per_episode = self.config['ppo']['max_nb_steps_per_episode']
+            self.unstick_by_beam_search = None
         else:
-            raise NotImplementedError
+            raise NotImplementedError(f"Unknown training method: {self.training_method}")
 
     def train(self):
         """
